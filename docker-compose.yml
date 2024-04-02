@@ -1,0 +1,665 @@
+version: "3.5"
+networks:
+  default:
+    name: zkevm
+    
+services:
+  zkevm-sequencer:
+    container_name: zkevm-sequencer
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    ports:
+      - 9092:9091 # needed if metrics enabled
+      - 6060:6060
+      - 6900:6900 # Data stream server
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_POOL_DB_HOST=zkevm-pool-db
+      - ZKEVM_NODE_MTCLIENT_URI=${ZKEVM_NODE_MTCLIENT_URI}
+      - ZKEVM_NODE_EXECUTOR_URI=${ZKEVM_NODE_EXECUTOR_URI}
+    volumes:
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+      - ./:/datastreamer
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components sequencer"
+
+  zkevm-sequence-sender:
+    container_name: zkevm-sequence-sender
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_POOL_DB_HOST=zkevm-pool-db
+      - ZKEVM_NODE_SEQUENCER_SENDER_ADDRESS=0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+      - ZKEVM_NODE_MTCLIENT_URI=${ZKEVM_NODE_MTCLIENT_URI}
+      - ZKEVM_NODE_EXECUTOR_URI=${ZKEVM_NODE_EXECUTOR_URI}
+    volumes:
+      - ./config/node/sequencer.keystore:/pk/sequencer.keystore
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components sequence-sender"
+
+  zkevm-json-rpc:
+    container_name: zkevm-json-rpc
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    ports:
+      - 8123:8123
+      - 8133:8133 # needed if WebSockets enabled
+      - 9091:9091 # needed if metrics enabled
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_POOL_DB_HOST=zkevm-pool-db
+      - ZKEVM_NODE_MTCLIENT_URI=${ZKEVM_NODE_MTCLIENT_URI}
+      - ZKEVM_NODE_EXECUTOR_URI=${ZKEVM_NODE_EXECUTOR_URI}
+    volumes:
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components rpc"
+
+  zkevm-aggregator:
+    container_name: zkevm-aggregator
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    ports:
+      - 50081:50081
+      - 9093:9091 # needed if metrics enabled
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_AGGREGATOR_SENDER_ADDRESS=0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+    volumes:
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components aggregator"
+
+  zkevm-sync:
+    container_name: zkevm-sync
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    ports:
+      - 9095:9091 # needed if metrics enabled
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_MTCLIENT_URI=${ZKEVM_NODE_MTCLIENT_URI}
+      - ZKEVM_NODE_EXECUTOR_URI=${ZKEVM_NODE_EXECUTOR_URI}
+    volumes:
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components synchronizer"
+
+  zkevm-eth-tx-manager:
+    container_name: zkevm-eth-tx-manager
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    ports:
+      - 9094:9091 # needed if metrics enabled
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+    volumes:
+      - ./config/node/sequencer.keystore:/pk/sequencer.keystore
+      - ./config/node/aggregator.keystore:/pk/aggregator.keystore
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components eth-tx-manager"
+
+  zkevm-l2gaspricer:
+    container_name: zkevm-l2gaspricer
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    environment:
+      - ZKEVM_NODE_POOL_DB_HOST=zkevm-pool-db
+    volumes:
+      - ./test.keystore:/pk/keystore
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components l2gaspricer"
+
+  zkevm-state-db:
+    container_name: zkevm-state-db
+    image: postgres:15
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    ports:
+      - 5432:5432
+    volumes:
+      - ./config/node/db_scripts/init_prover_db.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER=state_user
+      - POSTGRES_PASSWORD=state_password
+      - POSTGRES_DB=state_db
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+
+  zkevm-pool-db:
+    container_name: zkevm-pool-db
+    image: postgres:15
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    ports:
+      - 5433:5432
+    environment:
+      - POSTGRES_USER=pool_user
+      - POSTGRES_PASSWORD=pool_password
+      - POSTGRES_DB=pool_db
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+
+  zkevm-event-db:
+    container_name: zkevm-event-db
+    image: postgres:15
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    ports:
+      - 5435:5432
+    volumes:
+      - ./config/node/db_scripts/init_event_db.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER=event_user
+      - POSTGRES_PASSWORD=event_password
+      - POSTGRES_DB=event_db
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+
+  ### Explorer related
+  explorer-backend-l1:
+    extends:
+      file: ./services/docker-compose-explorer-backend.yml
+      service: explorer-backend
+    container_name: explorer-backend-l1
+    image: blockscout/blockscout:${EXPLORER_DOCKER_TAG_L1_BACKEND:-latest}
+    ports:
+      - 4000:4000
+    environment:
+      - NETWORK=ETH
+      - SUBNETWORK=Local Ethereum
+      - ETHEREUM_JSONRPC_HTTP_URL=http://zkevm-mock-l1-network:8545
+      - ETHEREUM_JSONRPC_TRACE_URL=http://zkevm-mock-l1-network:8545
+      - DATABASE_URL=postgres://l1_explorer_user:l1_explorer_password@explorer-backend-l1-db:5432/l1_explorer_db
+      - SECRET_KEY_BASE=${EXPLORER_L1_SECRET_KEY_BASE}
+      - MIX_ENV=prod
+      - INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER=true
+      - ETHEREUM_JSONRPC_DISABLE_ARCHIVE_BALANCES=true
+
+  explorer-backend-l1-db:
+    container_name: explorer-backend-l1-db
+    image: postgres:15
+    ports:
+      - 5436:5432
+    environment:
+      - POSTGRES_USER=l1_explorer_user
+      - POSTGRES_PASSWORD=l1_explorer_password
+      - POSTGRES_DB=l1_explorer_db
+    volumes:
+      - explorer_l1_db_data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+
+  explorer-smart-contract-verifier:
+    extends:
+      file: ./services/docker-compose-explorer-smart-contract-verifier.yml
+      service: explorer-smart-contract-verifier
+
+  explorer-visualizer:
+    extends:
+      file: ./services/docker-compose-explorer-visualizer.yml
+      service: explorer-visualizer
+
+  explorer-sig-provider:
+    extends:
+      file: ./services/docker-compose-explorer-sig-provider.yml
+      service: explorer-sig-provider
+
+  explorer-frontend-l1:
+    depends_on:
+      - explorer-backend-l1
+    extends:
+      file: ./services/docker-compose-explorer-frontend.yml
+      service: explorer-frontend
+    container_name: 'explorer-frontend-l1'
+    environment:
+      - NEXT_PUBLIC_API_PORT=81
+      - NEXT_PUBLIC_NETWORK_NAME=Local Ethereum
+      - NEXT_PUBLIC_NETWORK_SHORT_NAME=Local Ethereum
+      - NEXT_PUBLIC_NETWORK_ID=1337
+      - NEXT_PUBLIC_NETWORK_RPC_URL=http://${COMMON_HOST}:8545
+      - NEXT_PUBLIC_STATS_API_HOST=http://${COMMON_HOST}:8082
+    ports:
+      - 3000:3000
+
+  explorer-stats-db-l1:
+    depends_on:
+      - explorer-backend-l1
+    extends:
+      file: ./services/docker-compose-explorer-stats.yml
+      service: explorer-stats-db
+    container_name: 'explorer-stats-db-l1'
+    ports:
+      - 7433:5432
+
+  explorer-stats-l1:
+    depends_on:
+      - explorer-stats-db-l1
+    extends:
+      file: ./services/docker-compose-explorer-stats.yml
+      service: explorer-stats
+    container_name: 'explorer-stats-l1'
+    ports:
+      - 8153:8050
+    environment:
+      - STATS__DB_URL=postgres://explorer_stats_user:explorer_stats_password@explorer-stats-db-l1:5432/explorer_stats_db
+      - STATS__BLOCKSCOUT_DB_URL=postgresql://l1_explorer_user:l1_explorer_password@explorer-backend-l1-db:5432/l1_explorer_db
+
+  explorer-proxy-l1:
+    depends_on:
+      - explorer-backend-l1
+      - explorer-frontend-l1
+      - explorer-stats-l1
+    extends:
+      file: ./services/docker-compose-explorer-nginx.yml
+      service: explorer-proxy
+    container_name: 'explorer-proxy-l1'
+    environment:
+      PROXIED_FRONT_URL: http://${COMMON_HOST}:81
+      BACK_PROXY_PASS: http://explorer-backend-l1:4000
+      FRONT_PROXY_PASS: http://explorer-frontend-l1:3000
+      STATS_PROXY_PASS: http://explorer-stats-l1:8050/
+    ports:
+      - 81:80
+      - 8082:8080
+
+  explorer-visualizer-proxy:
+    extends:
+      file: ./services/docker-compose-explorer-nginx.yml
+      service: visualizer-proxy
+    container_name: 'visualizer-proxy'
+    environment:
+      PROXIED_FRONT_URL: http://${COMMON_HOST}:8083
+      FRONT_PROXY_PASS: http://explorer-visualizer:8050/
+    ports:
+      - 8083:8081
+
+  explorer-backend-l2:
+    extends:
+      file: ./services/docker-compose-explorer-backend.yml
+      service: explorer-backend
+    container_name: explorer-backend-l2
+    image: blockscout/blockscout-zkevm:${EXPLORER_DOCKER_TAG_L2_BACKEND:-latest}
+    ports:
+      - 4001:4000
+    environment:
+      - NETWORK=POE
+      - SUBNETWORK=Polygon Hermez
+      - ETHEREUM_JSONRPC_HTTP_URL=http://zkevm-explorer-json-rpc:8124
+      - ETHEREUM_JSONRPC_TRACE_URL=http://zkevm-explorer-json-rpc:8124
+      - DATABASE_URL=postgres://l2_explorer_user:l2_explorer_password@explorer-backend-l2-db:5432/l2_explorer_db
+      - SECRET_KEY_BASE=${EXPLORER_L2_SECRET_KEY_BASE}
+      - MIX_ENV=prod
+      - INDEXER_ZKEVM_BATCHES_ENABLED=true
+      - CHAIN_TYPE=polygon_zkevm
+      - CACHE_BLOCK_COUNT_PERIOD=5s
+
+  zkevm-explorer-json-rpc:
+    container_name: zkevm-explorer-json-rpc
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    ports:
+      - 8124:8124
+      - 8134:8134 # needed if WebSockets enabled
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_POOL_DB_HOST=zkevm-pool-db
+      - ZKEVM_NODE_RPC_PORT=8124
+      - ZKEVM_NODE_RPC_WEBSOCKETS_PORT=8134
+    volumes:
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node run --network custom --custom-network-file /app/genesis.json --cfg /app/config.toml --components rpc --http.api eth,net,debug,zkevm,txpool,web3"
+
+  explorer-backend-l2-db:
+    container_name: explorer-backend-l2-db
+    image: postgres:15
+    ports:
+      - 5437:5432
+    environment:
+      - POSTGRES_USER=l2_explorer_user
+      - POSTGRES_PASSWORD=l2_explorer_password
+      - POSTGRES_DB=l2_explorer_db
+    volumes:
+      - explorer_l2_db_data:/var/lib/postgresql/data
+    command: [ "postgres", "-N", "500" ]
+
+  explorer-frontend-l2:
+    depends_on:
+      - explorer-backend-l2
+    extends:
+      file: ./services/docker-compose-explorer-frontend.yml
+      service: explorer-frontend
+    container_name: 'explorer-frontend-l2'
+    environment:
+      - NEXT_PUBLIC_APP_PORT=3001
+      - NEXT_PUBLIC_NETWORK_NAME=zkEVM
+      - NEXT_PUBLIC_NETWORK_SHORT_NAME=zkEVM
+      - NEXT_PUBLIC_NETWORK_ID=1001
+      - NEXT_PUBLIC_NETWORK_RPC_URL=http://${COMMON_HOST}:8123
+      # TODO: should not use the main branch
+      - NEXT_PUBLIC_NETWORK_LOGO=https://raw.githubusercontent.com/blockscout/frontend-configs/main/configs/network-logos/polygon.svg
+      - NEXT_PUBLIC_NETWORK_ICON=https://raw.githubusercontent.com/blockscout/frontend-configs/main/configs/network-icons/polygon-short.svg
+      - NEXT_PUBLIC_HOMEPAGE_PLATE_BACKGROUND=linear-gradient(122deg, rgba(162, 41, 197, 1) 0%, rgba(123, 63, 228, 1) 100%)
+      - NEXT_PUBLIC_HOMEPAGE_PLATE_TEXT_COLOR=rgba(255, 255, 255, 1)
+      - NEXT_PUBLIC_STATS_API_HOST=http://${COMMON_HOST}:8084
+    ports:
+      - 3001:3000
+
+  explorer-stats-db-l2:
+    depends_on:
+      - explorer-backend-l2
+    extends:
+      file: ./services/docker-compose-explorer-stats.yml
+      service: explorer-stats-db
+    container_name: 'explorer-stats-db-l2'
+    ports:
+      - 7434:5432
+
+  explorer-stats-l2:
+    depends_on:
+      - explorer-stats-db-l2
+    extends:
+      file: ./services/docker-compose-explorer-stats.yml
+      service: explorer-stats
+    container_name: 'explorer-stats-l2'
+    ports:
+      - 8154:8050
+    environment:
+      - STATS__DB_URL=postgres://explorer_stats_user:explorer_stats_password@explorer-stats-db-l1:5432/explorer_stats_db
+      - STATS__BLOCKSCOUT_DB_URL=postgresql://l2_explorer_user:l2_explorer_password@explorer-backend-l2-db:5432/l2_explorer_db
+
+  explorer-proxy-l2:
+    depends_on:
+      - explorer-backend-l2
+      - explorer-frontend-l2
+      - explorer-stats-l2
+    extends:
+      file: ./services/docker-compose-explorer-nginx.yml
+      service: explorer-proxy
+    container_name: 'explorer-proxy-l2'
+    environment:
+      PROXIED_FRONT_URL: http://${COMMON_HOST}
+      BACK_PROXY_PASS: http://explorer-backend-l2:4000
+      FRONT_PROXY_PASS: http://explorer-frontend-l2:3000
+      STATS_PROXY_PASS: http://explorer-stats-l2:8050/
+    ports:
+      - 80:80
+      - 8084:8080
+
+  zkevm-mock-l1-network:
+    container_name: zkevm-mock-l1-network
+    image: snapchain/geth-cdk-validium-contracts:v0.0.2
+    ports:
+      - 8545:8545
+      - 8546:8546
+    volumes:
+      - deploy-output:/deploymentOutput
+    command:
+      - "--http"
+      - "--http.api"
+      - "admin,eth,debug,miner,net,txpool,personal,web3"
+      - "--http.addr"
+      - "0.0.0.0"
+      - "--http.corsdomain"
+      - "*"
+      - "--http.vhosts"
+      - "*"
+      - "--ws"
+      - "--ws.origins"
+      - "*"
+      - "--ws.addr"
+      - "0.0.0.0"
+      - "--dev"
+      - "--dev.period"
+      - "1"
+      - "--datadir"
+      - "/geth_data"
+      - "--syncmode"
+      - "full"
+      - "--rpc.allow-unprotected-txs"
+
+  # zkevm-deploy-sepolia:
+  #   container_name: zkevm-deploy-sepolia
+  #   image: snapchain/cdk-validium-contracts:v0.0.2
+  #   volumes:
+  #     - ./config/deploy_parameters.json:/cdk-validium-contracts/deployment/deploy_parameters.json
+  #     - deploy-output:/cdk-validium-contracts/deploymentOutput
+  #   environment:
+  #     - MNEMONIC=<deployer-mnemonic>
+  #     - INFURA_PROJECT_ID=<deployer-infura-project-id>
+  #     - HARDHAT_NETWORK=sepolia
+  #   command:
+  #     - "/bin/sh"
+  #     - "-c"
+  #     - "npm run deploy:deployer:CDKValidium:sepolia && npm run deploy:testnet:CDKValidium:sepolia"
+
+  zkevm-data-availability:
+    container_name: zkevm-data-availability
+    restart: unless-stopped
+    depends_on:
+      zkevm-data-node-db:
+        condition: service_healthy
+    image: hermeznetwork/cdk-data-availability:v0.0.3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    ports:
+      - 8444:8444
+    volumes:
+      - ./config/dac/config.toml:/app/config.toml
+      - ./config/dac/test-member.keystore:/pk/test-member.keystore
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/cdk-data-availability run --cfg /app/config.toml"
+
+  dac-setup-committee-mock-l1:
+    container_name: dac-setup-committee
+    image: snapchain/cdk-validium-contracts:v0.0.2
+    depends_on:
+      zkevm-mock-l1-network:
+        condition: service_started
+      zkevm-data-availability:
+        condition: service_started
+    volumes:
+      - deploy-output:/shared
+    environment:
+      - JSONRPC_HTTP_URL=http://zkevm-mock-l1-network:8545
+      - DAC_URL=http://zkevm-data-availability:8444
+      - DAC_ADDRESS=0x70997970c51812dc3a010c7d01b50e0d17dc79c8
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "npm run setup:committee"
+
+  # dac-setup-committee-sepolia:
+  #   container_name: dac-setup-committee
+  #   image: snapchain/zkevm-contracts
+  #   depends_on:
+  #     zkevm-deploy-sepolia:
+  #       condition: service_completed_successfully
+  #     zkevm-data-availability:
+  #       condition: service_started
+  #   volumes:
+  #     - deploy-output:/shared
+  #   environment:
+  #     - JSONRPC_HTTP_URL=https://sepolia.infura.io/v3/<deployer-infura-project-id>
+  #     - DAC_URL=http://zkevm-data-availability:8444
+  #     - DAC_ADDRESS=0x70997970c51812dc3a010c7d01b50e0d17dc79c8
+  #     - DEPLOYER_PRIVATE_KEY=<deployer-private-key>
+  #   command:
+  #     - "/bin/sh"
+  #     - "-c"
+  #     - "npm run setup:committee"
+
+  zkevm-prover:
+    container_name: zkevm-prover
+    image: hermeznetwork/zkevm-prover:v3.0.2
+    ports:
+      - 50061:50061 # MT
+      - 50071:50071 # Executor
+    volumes:
+      - ./config/node/prover.config.json:/usr/src/app/config.json
+    command: >
+      zkProver -c /usr/src/app/config.json
+
+ # from https://github.com/0xPolygonHermez/zkevm-bridge-service/blob/v0.3.1/docker-compose.yml
+  zkevm-bridge-db:
+    container_name: zkevm-bridge-db
+    image: postgres:15
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    expose:
+      - 5438
+    ports:
+      - 5438:5432
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+      - POSTGRES_DB=test_db
+    command: ["postgres", "-N", "500"]
+
+  # from https://github.com/0xPolygonHermez/zkevm-bridge-service/blob/v0.3.1/docker-compose.yml
+  zkevm-bridge-service:
+    container_name: zkevm-bridge-service
+    image: hermeznetwork/zkevm-bridge-service:v0.3.1
+    ports:
+      - 8080:8080
+      - 9090:9090
+    environment:
+      - ZKEVM_BRIDGE_DATABASE_USER=test_user
+      - ZKEVM_BRIDGE_DATABASE_PASSWORD=test_password
+      - ZKEVM_BRIDGE_DATABASE_NAME=test_db
+      - ZKEVM_BRIDGE_DATABASE_HOST=zkevm-bridge-db
+      - ZKEVM_BRIDGE_DATABASE_PORT=5432
+    volumes:
+      - ./config/bridge/claimtx.keystore:/pk/keystore.claimtxmanager
+      - ./config/bridge/config.toml:/app/config.toml
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-bridge run --cfg /app/config.toml"
+
+  zkevm-bridge-ui:
+    container_name: zkevm-bridge-ui
+    image: hermeznetwork/zkevm-bridge-ui:mainnet
+    ports:
+      - 8088:80
+    depends_on:
+      - zkevm-bridge-service
+    environment:
+      - ETHEREUM_RPC_URL=http://${COMMON_HOST}:8545
+      - ETHEREUM_EXPLORER_URL=http://${COMMON_HOST}:81
+      - ETHEREUM_BRIDGE_CONTRACT_ADDRESS=0x4C739372258826995C302CD655beE12689B97d3F
+      - ETHEREUM_FORCE_UPDATE_GLOBAL_EXIT_ROOT=true
+      - ETHEREUM_PROOF_OF_EFFICIENCY_CONTRACT_ADDRESS=0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82
+      - POLYGON_ZK_EVM_RPC_URL=http://${COMMON_HOST}:8123
+      - POLYGON_ZK_EVM_EXPLORER_URL=http://${COMMON_HOST}:80
+      - POLYGON_ZK_EVM_BRIDGE_CONTRACT_ADDRESS=0xff0EE8ea08cEf5cb4322777F5CC3E8A584B8A4A0
+      - POLYGON_ZK_EVM_NETWORK_ID=1
+      - BRIDGE_API_URL=http://${COMMON_HOST}:8080
+      - ENABLE_FIAT_EXCHANGE_RATES=false
+      - ENABLE_OUTDATED_NETWORK_MODAL=false
+      - ENABLE_DEPOSIT_WARNING=true
+      - ENABLE_REPORT_FORM=false
+
+  zkevm-approve:
+    container_name: zkevm-approve
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+    volumes:
+      - ./config/node/sequencer.keystore:/pk/keystore
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+      - "-c"
+      - "/app/zkevm-node approve --network custom --custom-network-file /app/genesis.json --key-store-path /pk/keystore --pw testonly --am 115792089237316195423570985008687907853269984665640564039457584007913129639935 -y --cfg /app/config.toml"
+
+  zkevm-sh:
+    container_name: zkevm-sh
+    image: hermeznetwork/cdk-validium-node:v0.0.3-RC2
+    stdin_open: true 
+    tty: true
+    environment:
+      - ZKEVM_NODE_STATE_DB_HOST=zkevm-state-db
+      - ZKEVM_NODE_POOL_DB_HOST=zkevm-pool-db
+    volumes:
+      - ./config/node/config.toml:/app/config.toml
+      - ./config/node/genesis.config.json:/app/genesis.json
+    command:
+      - "/bin/sh"
+
+  zkevm-data-node-db:
+    container_name: zkevm-data-node-db
+    restart: unless-stopped
+    image: postgres:15
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - 5444:5432
+    environment:
+      - POSTGRES_USER=committee_user
+      - POSTGRES_PASSWORD=committee_password
+      - POSTGRES_DB=committee_db
+    command:
+      - "postgres"
+      - "-N"
+      - "500"
+
+volumes:
+  deploy-output:
+  explorer_l1_db_data:
+  explorer_l2_db_data:
